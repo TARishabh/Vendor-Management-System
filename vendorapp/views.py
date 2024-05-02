@@ -1,6 +1,6 @@
 from rest_framework import generics
 from .models import Vendor,PurchaseOrder
-from .serializers import VendorPostSerializer,VendorRetrieveSerializer,PurchaseOrderCreateUpdateSerializer,PurchaseOrderDetailSerializer,PurchaseOrderUpdateSerializer
+from .serializers import VendorPostSerializer,VendorRetrieveSerializer,PurchaseOrderCreateUpdateSerializer,PurchaseOrderDetailSerializer,PurchaseOrderUpdateSerializer,PurchaseOrderAcknowledgeSerializer
 from .models import Vendor, HistoricalPerformance
 from .serializers import HistoricalPerformanceSerializer
 from rest_framework.response import Response
@@ -70,14 +70,18 @@ class VendorPerformanceAPIView(APIView):
         except Vendor.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-class AcknowledgePurchaseOrderAPIView(APIView):
+class PurchaseOrderAcknowledgeView(APIView):
     def post(self, request, po_id):
         try:
             purchase_order = PurchaseOrder.objects.get(pk=po_id)
-            purchase_order.acknowledgment_date = timezone.now()
-            purchase_order.save()
-            # Trigger recalculation of average_response_time
-            # Your logic to recalculate average_response_time here
-            return Response(status=status.HTTP_200_OK)
         except PurchaseOrder.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Purchase order not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = PurchaseOrderAcknowledgeSerializer(purchase_order, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            # Trigger recalculation of average_response_time
+            # Call the function or signal to recalculate average_response_time
+            # For example: update_avg_response_time(purchase_order)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

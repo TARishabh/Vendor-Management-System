@@ -1,13 +1,9 @@
-from django.db.models.signals import post_save,pre_save
+from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from .models import PurchaseOrder, HistoricalPerformance,Vendor
 from django.utils import timezone
 import pdb
-from django.db.models import ExpressionWrapper, F, Func, Value, IntegerField,Avg,Sum
-from datetime import date
-
-# Sure, here's how you can update the logic to either create a new HistoricalPerformance row or update an existing one based on the date:
-
+from django.db.models import Sum
 current_time = timezone.now()
 
 @receiver(pre_save, sender=PurchaseOrder)
@@ -31,7 +27,6 @@ def update_performance_metrics(sender, instance, **kwargs):
                     on_time_delivery_rate = previous_purchase_order.vendor.on_time_delivery_rate
                     avg_quality_rating = previous_purchase_order.vendor.quality_rating_avg
                 
-                # pdb.set_trace()
                 HistoricalPerformance.objects.create(
                         vendor=instance.vendor,
                         date=current_time.date(),
@@ -40,8 +35,9 @@ def update_performance_metrics(sender, instance, **kwargs):
                         average_response_time= avg_response_time,
                         fulfillment_rate= fulfillment_rate
                     )
+            elif instance.acknowledgment_date:
+                avg_response_time = update_avg_response_time(instance)
         except PurchaseOrder.DoesNotExist:
-            # Handle the case where the previous purchase order does not exist
             pass
 
     # vendor_on_time_delivery_rate = previous_purchase_order.vendor.on_time_delivery_rate
@@ -61,13 +57,15 @@ def update_fulfillment_rate(instance):
     # pdb.set_trace()
     if instance.status == 'completed':
         successful_orders += 1
-    if total_orders > 0:
+    if total_orders > 1:
+        fulfilment_rate = (successful_orders / total_orders) * 100
+    elif total_orders <= 1 and successful_orders <= 1:
         fulfilment_rate = (successful_orders / total_orders) * 100
     else:
         fulfilment_rate = 0
     
     # Update the delivery date of the completed order
-    PurchaseOrder.objects.filter(id=instance.id).update(delivery_date=current_time)
+
     Vendor.objects.filter(id=instance.vendor.id).update(fulfillment_rate=fulfilment_rate)
     return fulfilment_rate
     
@@ -76,26 +74,27 @@ def update_avg_response_time(instance):
     Calculate the average response time for the vendor.
     """
     # Get all completed orders of the vendor with acknowledgment dates
+    # pdb.set_trace()
+    if instance.acknowledgment_date:
+        PurchaseOrder.objects.filter(id=instance.id).update(acknowledgment_date=instance.acknowledgment_date)
+    
     completed_orders = PurchaseOrder.objects.filter(
         vendor=instance.vendor,
         acknowledgment_date__isnull=False
     )
-    # pdb.set_trace()
+    
     
     # Calculate the total response time for all completed orders
-    # total_response_time = sum((order.acknowledgment_date - order.issue_date).days for order in completed_orders)
-    response_time = []
-    for order in completed_orders:
-        print((order.acknowledgment_date - order.issue_date).days)
-        response_time.append((order.acknowledgment_date - order.issue_date).days)
-    
-    total_response_time = sum(response_time)
+    total_response_time = sum((order.acknowledgment_date - order.issue_date).days for order in completed_orders)
     print(total_response_time)
     
+    # total_response_time = sum((order.acknowledgment_date - order.issue_date).total_seconds() / (24 * 3600) for order in completed_orders)
+    # print(total_response_time)
+        
     
     # Calculate the average response time
     total_orders = completed_orders.count()
-    avg_response_time_days = total_response_time / total_orders if total_orders > 0 else None
+    avg_response_time_days = total_response_time / total_orders if total_orders > 0 else 0
     
     # Update the average response time for the vendor
     Vendor.objects.filter(id=instance.vendor.id).update(average_response_time=avg_response_time_days)
@@ -111,7 +110,6 @@ def update_on_time_delivery_rate(instance):
     total_records_count = PurchaseOrder.objects.filter(vendor=instance.vendor,status='completed').count()
     if instance.status == 'completed':
         total_records_count +=1 
-    # pdb.set_trace()
     
     # If there are no existing records, set initial_on_time_delivery_rate accordingly
     if total_records_count == 1:
@@ -122,7 +120,7 @@ def update_on_time_delivery_rate(instance):
             
     else:
         existing_on_time_delivery_rate = Vendor.objects.get(id=instance.vendor.id).on_time_delivery_rate
-        successful_orders = (existing_on_time_delivery_rate * (total_records_count))/100
+        successful_orders = (existing_on_time_delivery_rate * (total_records_count-1))/100
         if completed_order.delivery_date >= current_time:
             initial_on_time_delivery_rate = ((successful_orders + 1)*100)/(total_records_count)
         else:
@@ -132,149 +130,45 @@ def update_on_time_delivery_rate(instance):
             initial_on_time_delivery_rate = 100
         
         # Get the latest on-time delivery rate for the vendor
-    # on_time_delivery_rate = initial_on_time_delivery_rate if initial_on_time_delivery_rate else existing_on_time_delivery_rate
+    if instance.status == 'completed':
+        PurchaseOrder.objects.filter(id=instance.id).update(delivery_date=current_time)
     Vendor.objects.filter(id=instance.vendor.id).update(on_time_delivery_rate=initial_on_time_delivery_rate)
     return initial_on_time_delivery_rate
 
+from django.db.models import Avg
+
 def update_quality_rating_average(instance):
+    """
+    Calculate the average quality rating for the vendor.
+    """
     # Get the vendor of the completed order
     vendor = instance.vendor
     
-    # Get all completed orders of the vendor with a quality rating
-    completed_orders = PurchaseOrder.objects.filter(vendor=vendor, status='completed').exclude(quality_rating=None)
-    
-    # Calculate the total quality rating and count the number of orders with quality ratings
-    total_quality_rating = 0
-    total_ratings = 0
-    for order in completed_orders:
-        if order.quality_rating is not None:
-            total_quality_rating += order.quality_rating
-            total_ratings += 1
-    
-    # Calculate the average quality rating
-    average_quality_rating = total_quality_rating / total_ratings if total_ratings > 0 else 0
-    average_quality_rating = 5
-    return average_quality_rating
-    
-    
-    
-    
-    
-    
-    
-#     quality_rating_avg = 4.5
-#     average_response_time = 12.5
-#     fulfillment_rate = 95.0
-#     if instance.status == 'completed':
-#         completed_order = PurchaseOrder.objects.get(id=instance.id)
-#         current_time = timezone.now()
-#         # pdb.set_trace()
-#         # Check if there are any existing HistoricalPerformance records for the vendor
-#         existing_records_count = HistoricalPerformance.objects.filter(vendor=instance.vendor).count()
-#         print(existing_records_count,'existing_records_count')
-
-#         # If there are no existing records, set initial_on_time_delivery_rate accordingly
-#         if existing_records_count == 0:
-#             if completed_order.delivery_date >= current_time:
-#                 initial_on_time_delivery_rate = 100
-#             else:
-#                 initial_on_time_delivery_rate = 0
-
-#             HistoricalPerformance.objects.create(
-#                 vendor=instance.vendor,
-#                 date=current_time.date(),
-#                 on_time_delivery_rate=initial_on_time_delivery_rate,
-#                 quality_rating_avg= quality_rating_avg,
-#                 average_response_time= average_response_time,
-#                 fulfillment_rate= fulfillment_rate
-#             )
-#         else:
-#             # Get the latest on-time delivery rate for the vendor
-#             latest_on_time_delivery_rate = HistoricalPerformance.objects.filter(vendor=instance.vendor).order_by('-id').first().on_time_delivery_rate
-#             print(latest_on_time_delivery_rate,'latest_on_time_delivery_rate')
-#             # Calculate the successful delivery count
-#             successful_delivery_count = latest_on_time_delivery_rate * existing_records_count / 100
-#             print(successful_delivery_count,'successful_delivery_count')
-#             # Update existing records count and successful delivery count based on the current order
-#             if completed_order.delivery_date >= current_time:
-#                 successful_delivery_count = successful_delivery_count + 1
-#                 existing_records_count = existing_records_count + 1
-#             else:
-#                 print('yes i am in else')
-#                 existing_records_count = existing_records_count + 1
+    # Access the incoming quality_rating from the instance
+    quality_rating = instance.quality_rating
+    # Check if the quality_rating is provided
+    if quality_rating is not None:
+        # Check if the order is completed
+        if instance.status == 'completed':
+            # Get all completed orders of the vendor with a quality rating
+            completed_orders = PurchaseOrder.objects.filter(vendor=vendor, status='completed').exclude(quality_rating=None)
             
-#             # Calculate the new on-time delivery rate
-#             new_on_time_delivery_rate = (successful_delivery_count / existing_records_count) * 100
-#             print(new_on_time_delivery_rate)
-#             # Create or update HistoricalPerformance record
-#             HistoricalPerformance.objects.create(
-#                 vendor=instance.vendor,
-#                 date=current_time.date(),
-#                 on_time_delivery_rate=new_on_time_delivery_rate,
-#                 quality_rating_avg= quality_rating_avg,
-#                 average_response_time= average_response_time,
-#                 fulfillment_rate= fulfillment_rate
-#             )
-#         # Update the delivery date of the completed order
-#         PurchaseOrder.objects.filter(id=instance.id).update(delivery_date=current_time)
-
-# @receiver(post_save, sender=PurchaseOrder)
-# def update_fulfilment_rate(sender, instance, created, **kwargs):
-#     """
-#     Signal handler to update the fulfilment rate upon creation or update of a purchase order.
-#     """
-#     if not created:
-#         # Get the previous status using the primary key (pk)
-#         previous_status = PurchaseOrder.objects.get(pk=instance.pk).status
-
-#         if previous_status != instance.status:
-#             current_time = timezone.now()
-#             # Get the total number of purchase orders issued to the vendor
-#             total_orders = PurchaseOrder.objects.filter(vendor=instance.vendor).count()
+            # Calculate the total quality rating and count the number of orders with quality ratings
+            total_quality_rating = completed_orders.aggregate(total_rating=Sum('quality_rating'))['total_rating'] or 0
+            total_ratings = completed_orders.count()
             
-#             # Get the number of successfully fulfilled purchase orders
-#             successful_orders = PurchaseOrder.objects.filter(vendor=instance.vendor, status='completed').count()
+            # Calculate the new average quality rating including the incoming change
+            new_total_quality_rating = total_quality_rating + quality_rating
+            new_total_ratings = total_ratings + 1
+            average_quality_rating = new_total_quality_rating / new_total_ratings
             
-#             # Calculate the fulfilment rate
-#             if total_orders > 0:
-#                 fulfilment_rate = (successful_orders / total_orders) * 100
-#             else:
-#                 fulfilment_rate = 0
+            # Update the average quality rating for the vendor
+            Vendor.objects.filter(id=vendor.id).update(quality_rating_avg=average_quality_rating)
             
-#             previous_details =  HistoricalPerformance.objects.filter(vendor=instance.vendor)
-#             if previous_details.exists():
-#                 latest_performance = previous_details.latest('date')
-#                 quality_rating_avg = latest_performance.quality_rating_avg
-#                 average_response_time = latest_performance.average_response_time
-#                 on_time_delivery_rate = latest_performance.on_time_delivery_rate
-#             else:
-#                 quality_rating_avg = 0.0
-#                 average_response_time = 0.0
-#                 on_time_delivery_rate = 0.0
-            
-#             # Create or update HistoricalPerformance record
-#             HistoricalPerformance.objects.create(
-#                 vendor=instance.vendor,
-#                 date=current_time.date(),
-#                 on_time_delivery_rate=on_time_delivery_rate,
-#                 quality_rating_avg= quality_rating_avg,
-#                 average_response_time= average_response_time,
-#                 fulfillment_rate= fulfilment_rate
-#             )
-
-# # Prevent recursion by excluding fulfilment_rate field from triggering the post_save signal
-# # instance.save(update_fields=['status'])
-
-# if status is changed:
-# fulfilment rate, but if the status is changed only to completed then on_time_deli_rate is also called, if quality rating is also given then Quality Rating Average
-
-
-# hierarchy:
-# FullFillment (triggered everytime when status changes)
-# |
-# v
-# Average Response Time:(when status changes to cancel or pending)
-# |
-# v
-# On-Time Delivery Rate == Quality Rating Average: (when status is changed to completed)
-
+            return average_quality_rating
+        else:
+            # Order is not completed, return existing average quality rating
+            return vendor.quality_rating_avg
+    else:
+        # Quality rating is not provided, return existing average quality rating
+        return vendor.quality_rating_avg

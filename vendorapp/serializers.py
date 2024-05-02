@@ -41,7 +41,7 @@ class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrder
         fields = ['id', 'po_number', 'vendor', 'order_date', 'delivery_date', 'items', 'quantity', 'status', 'quality_rating']
-        read_only_fields = ['id', 'po_number', 'order_date', 'issue_date']
+        # read_only_fields = ['id', 'po_number', 'order_date', 'issue_date', 'delivery_date']  # Ensure delivery_date is read-only
 
 class PurchaseOrderCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -62,13 +62,13 @@ class PurchaseOrderCreateUpdateSerializer(serializers.ModelSerializer):
 class PurchaseOrderUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrder
-        fields = ['id','vendor', 'delivery_date', 'status', 'quality_rating']
+        fields = ['id', 'vendor', 'delivery_date', 'status', 'quality_rating']
         read_only_fields = ['id', 'order_date', 'issue_date', 'acknowledgment_date']
 
     def update(self, instance, validated_data):
         # Update acknowledgment_date if status changes from 'NA' to 'Cancel' or 'Pending'
-        if instance.status == 'NA' and validated_data.get('status') in ['canceled', 'pending']:
-            instance.acknowledgment_date = timezone.now()
+        # if instance.status == 'NA' and validated_data.get('status') in ['canceled', 'pending']:
+        #     instance.acknowledgment_date = timezone.now()
 
         # Updating other fields
         instance.vendor = validated_data.get('vendor', instance.vendor)
@@ -77,6 +77,19 @@ class PurchaseOrderUpdateSerializer(serializers.ModelSerializer):
         instance.quality_rating = validated_data.get('quality_rating', instance.quality_rating)
         instance.save()
         return instance
+    
+class PurchaseOrderAcknowledgeSerializer(serializers.ModelSerializer):
+    def validate_acknowledgment_date(self, value):
+        """
+        Check if acknowledgment_date is not less than today's date.
+        """
+        if value.date() < timezone.now().date():
+            raise serializers.ValidationError("Acknowledgment date cannot be in the past.")
+        return value
+    
+    class Meta:
+        model = PurchaseOrder
+        fields = ['acknowledgment_date']
 
 class HistoricalPerformanceSerializer(serializers.ModelSerializer):
     class Meta:
