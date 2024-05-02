@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from vendorapp.views import VendorListCreateView, VendorRetrieveUpdateDestroyView, PurchaseOrderListCreateView,PurchaseOrderRetrieveUpdateDestroyView,VendorPerformanceView
+from vendorapp.views import VendorListCreateView, VendorRetrieveUpdateDestroyView, PurchaseOrderListCreateView,PurchaseOrderRetrieveUpdateDestroyView,VendorPerformanceAPIView, AcknowledgePurchaseOrderAPIView
 
 
 urlpatterns = [
@@ -25,6 +25,8 @@ urlpatterns = [
     path('api/vendors/<int:pk>/', VendorRetrieveUpdateDestroyView.as_view(), name='vendor-retrieve-update-destroy'),
     path('api/purchase_orders/', PurchaseOrderListCreateView.as_view(), name='purchaseorder-list-create'),
     path('api/purchase_orders/<int:pk>/', PurchaseOrderRetrieveUpdateDestroyView.as_view(), name='purchaseorder-detail'),
-    path('api/vendors/<int:pk>/performance/', VendorPerformanceView.as_view(), name='vendor_performance'),
+    path('api/vendors/<int:vendor_id>/performance/', VendorPerformanceAPIView.as_view(), name='vendor_performance'),
+    path('api/purchase_orders/<int:po_id>/acknowledge/', AcknowledgePurchaseOrderAPIView.as_view(), name='acknowledge_purchase_order'),
+
 
 ]

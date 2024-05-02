@@ -19,3 +19,4 @@ models/migrations/
 *.log
 *.csv
 *.json
+vendor-management-system.code-workspace

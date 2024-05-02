@@ -4,6 +4,12 @@ from .serializers import VendorPostSerializer,VendorRetrieveSerializer,PurchaseO
 from .models import Vendor, HistoricalPerformance
 from .serializers import HistoricalPerformanceSerializer
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from .serializers import VendorPerformanceSerializer
+from rest_framework import status
+from django.utils import timezone
+
+
 
 class VendorListCreateView(generics.ListCreateAPIView):
     queryset = Vendor.objects.all()
@@ -45,12 +51,33 @@ class PurchaseOrderRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVi
             return PurchaseOrderUpdateSerializer
         return PurchaseOrderDetailSerializer
     
-class VendorPerformanceView(generics.RetrieveAPIView):
-    queryset = Vendor.objects.all()
-    serializer_class = HistoricalPerformanceSerializer
+# class VendorPerformanceView(generics.RetrieveAPIView):
+#     queryset = Vendor.objects.all()
+#     serializer_class = HistoricalPerformanceSerializer
 
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        historical_performance = HistoricalPerformance.objects.filter(vendor=instance)
-        serializer = self.get_serializer(historical_performance, many=True)
-        return Response(serializer.data)
+#     def retrieve(self, request, *args, **kwargs):
+#         instance = self.get_object()
+#         historical_performance = HistoricalPerformance.objects.filter(vendor=instance)
+#         serializer = self.get_serializer(historical_performance, many=True)
+#         return Response(serializer.data)
+
+class VendorPerformanceAPIView(APIView):
+    def get(self, request, vendor_id):
+        try:
+            vendor = Vendor.objects.get(pk=vendor_id)
+            serializer = VendorPerformanceSerializer(vendor)
+            return Response(serializer.data)
+        except Vendor.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+class AcknowledgePurchaseOrderAPIView(APIView):
+    def post(self, request, po_id):
+        try:
+            purchase_order = PurchaseOrder.objects.get(pk=po_id)
+            purchase_order.acknowledgment_date = timezone.now()
+            purchase_order.save()
+            # Trigger recalculation of average_response_time
+            # Your logic to recalculate average_response_time here
+            return Response(status=status.HTTP_200_OK)
+        except PurchaseOrder.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
