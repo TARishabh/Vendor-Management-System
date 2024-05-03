@@ -54,7 +54,9 @@ class PurchaseOrderCreateUpdateSerializer(serializers.ModelSerializer):
         validated_data['po_number'] = str(uuid.uuid4())
         # Set order_date to current time
         validated_data['order_date'] = timezone.now()
-        validated_data['issue_date'] = timezone.now()
+        if 'vendor' in validated_data:
+            # Set issue_date to current time
+            validated_data['issue_date'] = timezone.now()
         # Set delivery_date to 7 days after order_date
         validated_data['delivery_date'] = validated_data['order_date'] + timedelta(days=7)
         return super().create(validated_data)
