@@ -50,16 +50,6 @@ class PurchaseOrderRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVi
         if self.request.method in ['PUT', 'PATCH']:
             return PurchaseOrderUpdateSerializer
         return PurchaseOrderDetailSerializer
-    
-# class VendorPerformanceView(generics.RetrieveAPIView):
-#     queryset = Vendor.objects.all()
-#     serializer_class = HistoricalPerformanceSerializer
-
-#     def retrieve(self, request, *args, **kwargs):
-#         instance = self.get_object()
-#         historical_performance = HistoricalPerformance.objects.filter(vendor=instance)
-#         serializer = self.get_serializer(historical_performance, many=True)
-#         return Response(serializer.data)
 
 class VendorPerformanceAPIView(APIView):
     def get(self, request, vendor_id):
